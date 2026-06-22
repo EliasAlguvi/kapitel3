@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vindkarta Sverige</title>
+
+  <!-- Leaflet: gratis kartbibliotek, laddas från internet (CDN). Inget att installera. -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
+
+  <style>
+    :root {
+      --ink: #16222e;        /* mörk text */
+      --muted: #5d6b78;      /* dämpad text */
+      --line: #dde4ea;       /* tunna linjer */
+      --panel: #ffffff;      /* paneler */
+      --bg: #eef2f5;         /* sidbakgrund */
+      --wind: #2f7da3;       /* accent: vindblå */
+      --drift: #2f9e6b;      /* status: i drift */
+      --bygg: #d98a2b;       /* status: under byggnad */
+      --plan: #8a8f97;       /* status: planerad */
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+    }
+
+    /* Rubrikrad */
+    header {
+      padding: 14px 20px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: baseline;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 18px;
+      letter-spacing: 0.5px;
+      font-weight: 650;
+    }
+    header p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    /* Huvudlayout: karta + sidopanel */
+    .layout {
+      display: flex;
+      height: calc(100% - 56px);
+    }
+    #map {
+      flex: 1 1 auto;
+      height: 100%;
+    }
+    .sidebar {
+      flex: 0 0 380px;
+      max-width: 45%;
+      height: 100%;
+      overflow-y: auto;
+      background: var(--panel);
+      border-left: 1px solid var(--line);
+    }
+
+    .sidebar-head {
+      padding: 14px 16px 8px;
+      position: sticky;
+      top: 0;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+      z-index: 1;
+    }
+    .sidebar-head h2 {
+      margin: 0 0 2px;
+      font-size: 14px;
+      letter-spacing: 0.4px;
+    }
+    .sidebar-head span {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    thead th {
+      text-align: left;
+      padding: 8px 12px;
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      border-bottom: 1px solid var(--line);
+      position: sticky;
+      top: 49px;
+      background: var(--panel);
+    }
+    tbody td {
+      padding: 9px 12px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+    tbody tr { cursor: pointer; }
+    tbody tr:hover { background: #f3f7fa; }
+    tbody tr.active {
+      background: #e3f0f6;
+      box-shadow: inset 3px 0 0 var(--wind);
+    }
+
+    .namn { font-weight: 600; }
+    .plats { color: var(--muted); font-size: 12px; }
+
+    /* Liten färgprick för status */
+    .dot {
+      display: inline-block;
+      width: 9px; height: 9px;
+      border-radius: 50%;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+    .status-drift .dot { background: var(--drift); }
+    .status-bygg  .dot { background: var(--bygg); }
+    .status-plan  .dot { background: var(--plan); }
+
+    .popup-title { font-weight: 650; margin-bottom: 4px; }
+    .popup-row { font-size: 12.5px; color: var(--ink); }
+    .popup-row b { color: var(--muted); font-weight: 600; }
+
+    /* Mobil: lägg tabellen under kartan */
+    @media (max-width: 760px) {
+      .layout { flex-direction: column; height: calc(100% - 56px); }
+      #map { flex: 1 1 55%; }
+      .sidebar { flex: 1 1 45%; max-width: 100%; border-left: none; border-top: 1px solid var(--line); }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>VINDKARTA SVERIGE</h1>
+    <p>Klicka på en punkt i kartan eller en rad i tabellen — de hänger ihop.</p>
+  </header>
+
+  <div class="layout">
+    <div id="map"></div>
+
+    <aside class="sidebar">
+      <div class="sidebar-head">
+        <h2>Vindkraftverk</h2>
+        <span id="antal"></span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Namn</th>
+            <th>Effekt</th>
+            <th>Verk</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="tabell"></tbody>
+      </table>
+    </aside>
+  </div>
+
+  <!-- Leaflet-koden -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    /* =========================================================
+       1) DATA
+       ---------------------------------------------------------
+       Det här är EXEMPELDATA (platshållare) så att du får något
+       att titta på direkt. Siffrorna är ungefärliga och ska bytas
+       ut mot riktig data från Vindbrukskollen.
+
+       Varje rad: namn, plats, lat (nord), lng (öst),
+       effekt i MW, antal verk, status ("drift" / "bygg" / "plan").
+       Lägg till eller ta bort rader fritt.
+       ========================================================= */
+    const vindkraftverk = [
+      { namn: "Markbygden",            plats: "Piteå, Norrbotten",        lat: 65.30, lng: 20.60, effekt: 4000, verk: 1100, status: "drift" },
+      { namn: "Sjisjka",               plats: "Gällivare, Norrbotten",    lat: 67.45, lng: 20.30, effekt: 78,   verk: 30,   status: "drift" },
+      { namn: "Blakliden Fäbodberget", plats: "Åsele, Västerbotten",      lat: 64.05, lng: 17.20, effekt: 353,  verk: 84,   status: "drift" },
+      { namn: "Stamåsen",              plats: "Sollefteå, Västernorrland",lat: 63.55, lng: 16.40, effekt: 60,   verk: 26,   status: "drift" },
+      { namn: "Mässingberget",         plats: "Orsa, Dalarna",            lat: 61.30, lng: 14.70, effekt: 45,   verk: 11,   status: "bygg"  },
+      { namn: "Hjuleberg",             plats: "Falkenberg, Halland",      lat: 56.95, lng: 12.70, effekt: 81,   verk: 33,   status: "drift" },
+      { namn: "Lillgrund (havsbaserat)", plats: "Öresund",                lat: 55.50, lng: 12.77, effekt: 110,  verk: 48,   status: "drift" },
+      { namn: "Exempel Sydost",        plats: "Kalmar län",               lat: 57.10, lng: 16.10, effekt: 30,   verk: 8,    status: "plan"  }
+    ];
+
+    const statusText = { drift: "I drift", bygg: "Under byggnad", plan: "Planerad" };
+    const statusFarg  = { drift: "#2f9e6b", bygg: "#d98a2b", plan: "#8a8f97" };
+
+    /* =========================================================
+       2) KARTAN OCH KARTLAGREN
+       ========================================================= */
+    const map = L.map("map").setView([62.5, 16.5], 5);
+
+    // Två bakgrundskartor (kartlager) som du kan växla mellan
+    const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "© OpenStreetMap"
+    }).addTo(map); // OSM visas som standard
+
+    const topo = L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", {
+      maxZoom: 17,
+      attribution: "© OpenTopoMap (CC-BY-SA), © OpenStreetMap"
+    });
+
+    /* =========================================================
+       3) VINDKRAFTVERKEN SOM EGET LAGER + TABELLEN
+       ========================================================= */
+    const vindLager = L.layerGroup().addTo(map);
+    const tabell = document.getElementById("tabell");
+    document.getElementById("antal").textContent = vindkraftverk.length + " anläggningar (exempeldata)";
+
+    // Vi sparar markör + tabellrad ihop så att de kan prata med varandra
+    const kopplingar = [];
+
+    vindkraftverk.forEach(function (v, i) {
+      // --- Markör i kartan ---
+      const markor = L.circleMarker([v.lat, v.lng], {
+        radius: 8,
+        color: "#ffffff",
+        weight: 2,
+        fillColor: statusFarg[v.status],
+        fillOpacity: 0.95
+      }).addTo(vindLager);
+
+      markor.bindPopup(
+        '<div class="popup-title">' + v.namn + "</div>" +
+        '<div class="popup-row"><b>Plats:</b> ' + v.plats + "</div>" +
+        '<div class="popup-row"><b>Effekt:</b> ' + v.effekt + " MW</div>" +
+        '<div class="popup-row"><b>Antal verk:</b> ' + v.verk + "</div>" +
+        '<div class="popup-row"><b>Status:</b> ' + statusText[v.status] + "</div>"
+      );
+
+      // --- Rad i tabellen ---
+      const rad = document.createElement("tr");
+      rad.className = "status-" + v.status;
+      rad.innerHTML =
+        '<td><div class="namn">' + v.namn + '</div><div class="plats">' + v.plats + "</div></td>" +
+        "<td>" + v.effekt + " MW</td>" +
+        "<td>" + v.verk + "</td>" +
+        '<td><span class="dot"></span>' + statusText[v.status] + "</td>";
+      tabell.appendChild(rad);
+
+      kopplingar.push({ markor: markor, rad: rad });
+
+      // Klick på rad → flyg till punkten, öppna popup, markera
+      rad.addEventListener("click", function () {
+        markera(i);
+        map.flyTo([v.lat, v.lng], 9, { duration: 0.6 });
+        markor.openPopup();
+      });
+
+      // Klick på markör → markera raden och scrolla fram den
+      markor.on("click", function () {
+        markera(i);
+        rad.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    });
+
+    function markera(index) {
+      kopplingar.forEach(function (k, j) {
+        k.rad.classList.toggle("active", j === index);
+      });
+    }
+
+    // Lagerväljaren uppe till höger: byt bakgrund och tänd/släck vindkraftverken
+    L.control.layers(
+      { "Karta (OSM)": osm, "Terräng (topografisk)": topo },
+      { "Vindkraftverk": vindLager },
+      { collapsed: false }
+    ).addTo(map);
+  </script>
+</body>
+</html>
