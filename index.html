@@ -3,7 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Vindkarta Sverige</title>
+  <title>Kapitel 3 — Vindkraftsbeståndet</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;1,500;1,600&family=Lato:wght@400;500;700&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
@@ -11,64 +15,111 @@
 
   <style>
     :root {
-      --ink:#16222e; --muted:#5d6b78; --line:#dde4ea;
-      --panel:#fff; --bg:#eef2f5; --wind:#2f7da3;
+      /* Kapitel 3 — palett hämtad direkt ur pitchdäcket */
+      --forest:      #163a21;   /* djup skogsgrön — sidhuvud */
+      --forest-deep: #11301b;
+      --paper:       #edf4e2;   /* ljus grön "pappersbakgrund" */
+      --card:        #ffffff;   /* vita kort */
+      --sage:        #5e7b4d;   /* medelgrön accent — punkter, siffror, länkar */
+      --sage-soft:   #dcebd2;   /* mjuk grön — hover */
+      --ink:         #1f3325;   /* mörk grön rubriktext */
+      --muted:       #3e4c40;   /* dämpad brödtext (används även i skriptet) */
+      --line:        #cdd9be;   /* tunna linjer */
+      --wind:        #5e7b4d;   /* accent (bakåtkompatibel med skriptets var-namn) */
     }
     * { box-sizing:border-box; }
-    html, body { margin:0; height:100%; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; color:var(--ink); background:var(--bg); }
+    html, body { margin:0; height:100%; font-family:"Lato",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; color:var(--muted); background:var(--paper); }
     body { display:flex; flex-direction:column; }
 
-    header { padding:13px 20px; background:var(--panel); border-bottom:1px solid var(--line); display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; }
-    header h1 { margin:0; font-size:18px; letter-spacing:.5px; font-weight:650; }
-    header p { margin:0; color:var(--muted); font-size:13px; }
+    /* Sidhuvud */
+    header { background:var(--forest); color:#eef4e6; padding:16px 26px 15px; display:flex; align-items:center; gap:20px; flex-wrap:wrap; border-bottom:1px solid var(--forest-deep); }
+    .brand { display:flex; flex-direction:column; gap:2px; }
+    .eyebrow { display:inline-flex; align-items:center; gap:8px; font-size:11px; letter-spacing:2px; text-transform:uppercase; font-weight:700; color:#a9c293; }
+    .eyebrow .dot { width:8px; height:8px; border-radius:50%; background:var(--sage); display:inline-block; }
+    .wordmark { font-family:"Playfair Display",Georgia,serif; font-style:italic; font-weight:600; font-size:30px; line-height:1; color:#fff; letter-spacing:.3px; }
+    header .sub { margin-left:auto; text-align:right; font-size:12.5px; color:#b9cea6; max-width:360px; }
+    header .sub b { color:#eef4e6; font-weight:700; }
 
     .layout { flex:1 1 auto; display:flex; min-height:0; }
-    #map { flex:1 1 auto; }
-    .sidebar { flex:0 0 360px; max-width:45%; display:flex; flex-direction:column; background:var(--panel); border-left:1px solid var(--line); min-height:0; }
+    #map { flex:1 1 auto; background:var(--paper); }
+    .sidebar { flex:0 0 380px; max-width:46%; display:flex; flex-direction:column; background:var(--card); border-left:1px solid var(--line); min-height:0; }
 
-    .sidebar-head { padding:12px 16px 10px; border-bottom:1px solid var(--line); }
-    .sidebar-head h2 { margin:0 0 2px; font-size:14px; letter-spacing:.4px; }
-    .sidebar-head span { font-size:12px; color:var(--muted); }
-    .sidebar-head input { width:100%; margin-top:9px; padding:8px 10px; font-size:13px; border:1px solid var(--line); border-radius:6px; }
-    .sidebar-head input:focus { outline:2px solid var(--wind); outline-offset:-1px; border-color:var(--wind); }
+    .sidebar-head { padding:18px 20px 14px; border-bottom:1px solid var(--line); }
+    .sidebar-head .eyebrow { color:var(--sage); margin-bottom:8px; }
+    .sidebar-head h2 { margin:0 0 4px; font-family:"Playfair Display",Georgia,serif; font-weight:600; font-size:24px; color:var(--ink); letter-spacing:.2px; }
+    .sidebar-head span { font-size:12.5px; color:var(--muted); }
+    .sidebar-head span b { color:var(--sage); font-weight:700; }
+    .sidebar-head input { width:100%; margin-top:13px; padding:10px 12px; font-size:13.5px; font-family:inherit; color:var(--ink); background:var(--paper); border:1px solid var(--line); border-radius:8px; }
+    .sidebar-head input::placeholder { color:#8a9a7d; }
+    .sidebar-head input:focus { outline:2px solid var(--sage); outline-offset:-1px; border-color:var(--sage); }
 
     .list { overflow-y:auto; flex:1 1 auto; }
-    .row { padding:9px 16px; border-bottom:1px solid var(--line); cursor:pointer; }
-    .row:hover { background:#f3f7fa; }
-    .row .namn { font-weight:600; font-size:13px; }
-    .row .meta { color:var(--muted); font-size:12px; margin-top:1px; }
-    .row .stat { font-size:12px; margin-top:2px; }
-    .row .stat b { color:var(--wind); }
+    .row { padding:12px 20px; border-bottom:1px solid var(--line); cursor:pointer; transition:background .12s ease; }
+    .row:hover { background:var(--sage-soft); }
+    .row .namn { font-weight:700; font-size:14px; color:var(--ink); }
+    .row .meta { color:var(--muted); font-size:12px; margin-top:2px; }
+    .row .stat { font-size:12px; margin-top:4px; }
+    .row .stat b { color:var(--sage); font-weight:700; }
 
-    .popup-title { font-weight:650; margin-bottom:4px; }
-    .popup-row { font-size:12.5px; }
-    .popup-row b { color:var(--muted); font-weight:600; }
+    /* Popup */
+    .leaflet-popup-content-wrapper { border-radius:10px; }
+    .popup-title { font-family:"Playfair Display",Georgia,serif; font-weight:600; font-size:16px; color:var(--ink); margin-bottom:6px; }
+    .popup-row { font-size:12.5px; color:var(--muted); line-height:1.5; }
+    .popup-row b { color:var(--sage); font-weight:700; }
 
-    .statusbox { position:absolute; z-index:500; left:10px; bottom:18px; background:rgba(255,255,255,.95); border:1px solid var(--line); border-radius:8px; padding:8px 11px; font-size:12px; max-width:235px; box-shadow:0 1px 4px rgba(0,0,0,.08); }
-    .statusbox .shead { font-weight:650; margin-bottom:5px; letter-spacing:.3px; }
-    .statusbox .srow { display:flex; align-items:center; gap:7px; padding:2px 0; line-height:1.25; }
-    .statusbox .sdot { flex:0 0 auto; width:10px; height:10px; border-radius:50%; background:#c4ccd4; }
+    /* Diagnostikpanel (lagerstatus) */
+    .statusbox { position:absolute; z-index:600; left:14px; bottom:22px; background:rgba(255,255,255,.96); border:1px solid var(--line); border-radius:10px; padding:11px 14px; font-size:12px; color:var(--muted); max-width:250px; box-shadow:0 4px 14px rgba(17,48,27,.14); }
+    .statusbox .shead { display:inline-flex; align-items:center; gap:8px; font-size:10px; letter-spacing:2px; text-transform:uppercase; font-weight:700; color:var(--sage); margin-bottom:8px; }
+    .statusbox .shead::before { content:""; width:7px; height:7px; border-radius:50%; background:var(--sage); display:inline-block; }
+    .statusbox .srow { display:flex; align-items:center; gap:8px; padding:3px 0; line-height:1.3; }
+    .statusbox .sdot { flex:0 0 auto; width:9px; height:9px; border-radius:50%; background:#b9cea6; }
 
-    @media (max-width:760px) {
+    /* Förklaring */
+    .legend { position:absolute; z-index:600; right:14px; bottom:22px; background:rgba(255,255,255,.96); border:1px solid var(--line); border-radius:10px; padding:11px 14px; font-size:12px; color:var(--muted); box-shadow:0 4px 14px rgba(17,48,27,.14); }
+    .legend .shead { display:inline-flex; align-items:center; gap:8px; font-size:10px; letter-spacing:2px; text-transform:uppercase; font-weight:700; color:var(--sage); margin-bottom:7px; }
+    .legend .shead::before { content:""; width:7px; height:7px; border-radius:50%; background:var(--sage); display:inline-block; }
+    .legend .item { display:flex; align-items:center; gap:8px; }
+    .legend .swatch { width:12px; height:12px; border-radius:50%; background:var(--sage); border:1.5px solid #fff; }
+
+    /* Leaflet-kontroller i samma ton */
+    .leaflet-control-layers { border-radius:10px !important; border:1px solid var(--line) !important; box-shadow:0 4px 14px rgba(17,48,27,.14) !important; }
+    .leaflet-control-layers-list { font-family:"Lato",sans-serif; font-size:13px; color:var(--ink); }
+
+    @media (max-width:820px) {
+      header { padding:13px 18px; }
+      header .sub { display:none; }
+      .wordmark { font-size:25px; }
       .layout { flex-direction:column; }
-      .sidebar { flex:1 1 42%; max-width:100%; border-left:none; border-top:1px solid var(--line); }
-      #map { flex:1 1 58%; }
+      .sidebar { flex:1 1 44%; max-width:100%; border-left:none; border-top:1px solid var(--line); }
+      #map { flex:1 1 56%; }
+      .statusbox { max-width:200px; font-size:11px; }
+      .legend { font-size:11px; }
     }
   </style>
 </head>
 <body>
   <header>
-    <h1>VINDKARTA SVERIGE</h1>
-    <p>Verk i drift enligt Vindbrukskollen. Klicka en park i listan eller en punkt i kartan.</p>
+    <div class="brand">
+      <span class="eyebrow"><span class="dot"></span>Vindkraftsbeståndet i Sverige</span>
+      <span class="wordmark">Kapitel 3</span>
+    </div>
+    <div class="sub">Sourcing &amp; analys av befintliga vindtillgångar i <b>SE3/SE4</b> — operativt värdeskapande genom förvärv och uppgradering.</div>
   </header>
 
   <div class="layout">
-    <div id="map"><div id="status" class="statusbox"><div class="shead">Lagerstatus</div></div></div>
+    <div id="map">
+      <div id="status" class="statusbox"><div class="shead">Lagerstatus</div></div>
+      <div class="legend">
+        <div class="shead">Förklaring</div>
+        <div class="item"><span class="swatch"></span>Vindkraftverk i drift</div>
+      </div>
+    </div>
     <aside class="sidebar">
       <div class="sidebar-head">
-        <h2>Vindparker</h2>
+        <div class="eyebrow"><span class="dot"></span>Vindparker</div>
+        <h2>Bestånd &amp; lägen</h2>
         <span id="stats"></span>
-        <input id="sok" type="text" placeholder="Sök park eller kommun..." />
+        <input id="sok" type="text" placeholder="Sök park, kommun eller län…" />
       </div>
       <div class="list" id="list"></div>
     </aside>
@@ -104,7 +155,7 @@
 
     VERK.forEach(function (v) {
       const m = L.circleMarker([v.lat, v.lng], {
-        radius:6, color:"#fff", weight:1.5, fillColor:"#2f7da3", fillOpacity:.95
+        radius:6, color:"#fff", weight:1.5, fillColor:"#5e7b4d", fillOpacity:.95
       });
       m.bindPopup(popup(v));
       cluster.addLayer(m);
